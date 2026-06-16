@@ -1,0 +1,11 @@
+services:
+  cotizador:
+    build: .
+    ports:
+      - "2525:2525"
+    volumes:
+      - cotizador_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  cotizador_data:
