@@ -46,7 +46,7 @@ const CT_LABELS = { VISA: 'TC Otro Banco Visa', MC: 'TC Otro Banco MC', PROPIA: 
 
 function getMaxOneCuotaRate(banco, cfg) {
   if (!banco || !cfg) return null
-  return ['VISA', 'MC', 'PROPIA']
+  return ['VISA', 'MC']
     .filter(ct => cfg.oneCuota[banco]?.[ct]?.enabled)
     .map(ct => ({ ct, rate: cfg.oneCuota[banco][ct].rate }))
     .sort((a, b) => b.rate - a.rate)[0] ?? null
