@@ -42,6 +42,16 @@ function getComparativoPropiaVsOtro(bancoPOS, propiaRed, monto, cfg) {
   }).sort((a, b) => a.valorFinanciero - b.valorFinanciero)
 }
 
+const CT_LABELS = { VISA: 'TC Otro Banco Visa', MC: 'TC Otro Banco MC', PROPIA: 'TC Propia' }
+
+function getMaxOneCuotaRate(banco, cfg) {
+  if (!banco || !cfg) return null
+  return ['VISA', 'MC', 'PROPIA']
+    .filter(ct => cfg.oneCuota[banco]?.[ct]?.enabled)
+    .map(ct => ({ ct, rate: cfg.oneCuota[banco][ct].rate }))
+    .sort((a, b) => b.rate - a.rate)[0] ?? null
+}
+
 // ── Modo Tarjeta ──────────────────────────────────────────────────────────────
 
 function getPlanOptionsByCard(cardBanco, cfg) {
@@ -98,10 +108,12 @@ export default function App() {
   const [error,     setError]     = useState('')
 
   // Modo POS
-  const [banco,       setBanco]       = useState('')
-  const [cardType,    setCardType]    = useState('VISA')
-  const [propiaRed,   setPropiaRed]   = useState('VISA')
-  const [montoPuntos, setMontoPuntos] = useState('')
+  const [banco,         setBanco]         = useState('')
+  const [cardType,      setCardType]      = useState('VISA')
+  const [propiaRed,     setPropiaRed]     = useState('VISA')
+  const [montoPuntos,   setMontoPuntos]   = useState('')
+  const [conoceTarjeta, setConoceTarjeta] = useState(null)  // null | true | false
+  const [tasaManual,    setTasaManual]    = useState('')
 
   // Modo Tarjeta
   const [cardBanco, setCardBanco] = useState('')
@@ -115,7 +127,7 @@ export default function App() {
   // Derivados modo POS
   const planOptions        = getPlanOptions(banco, config)
   const isPropia           = cardType === 'PROPIA'
-  const showTarjeta        = plan !== '' && !isPuntos
+  const showTarjeta        = plan !== '' && !isPuntos && (mode !== 'pos' || plan !== '1' || conoceTarjeta !== null)
   const availableCardTypes = plan === '1'
     ? CARD_TYPES.filter(ct => config?.oneCuota[banco]?.[ct.id]?.enabled)
     : CARD_TYPES
@@ -127,13 +139,14 @@ export default function App() {
   function limpiar() {
     setPlan(''); setMonto(''); setResultado(null); setError('')
     setBanco(''); setCardType('VISA'); setPropiaRed('VISA'); setMontoPuntos('')
+    setConoceTarjeta(null); setTasaManual('')
     setCardBanco(''); setCardRed('VISA')
   }
 
   function onModeChange(m) { setMode(m); limpiar() }
-  function onBancoChange(v)     { setBanco(v);     setPlan(''); setMonto(''); setMontoPuntos(''); setResultado(null); setError('') }
+  function onBancoChange(v)     { setBanco(v);     setPlan(''); setMonto(''); setMontoPuntos(''); setConoceTarjeta(null); setTasaManual(''); setResultado(null); setError('') }
   function onCardBancoChange(v) { setCardBanco(v); setPlan(''); setMonto(''); setResultado(null); setError('') }
-  function onPlanChange(v)      { setPlan(v);      setMonto(''); setMontoPuntos(''); setResultado(null); setError('') }
+  function onPlanChange(v)      { setPlan(v);      setMonto(''); setMontoPuntos(''); setConoceTarjeta(null); setTasaManual(''); setResultado(null); setError('') }
 
   async function handleAdminSave(newCfg) {
     await saveConfig(newCfg)
@@ -155,15 +168,27 @@ export default function App() {
 
       let tarjetaResult = null
       let puntosResult  = null
+      let esManual      = false
       if (showTarjeta) {
-        const cell = cuotas === 1 ? config.oneCuota[banco][cardType] : config.tasa0[banco][cuotas]
-        const base = calcularCargo(m, cell.rate)
-        tarjetaResult = { ...base, cuotas, valorPorCuota: isTasa0 ? base.totalACobrar / cuotas : null }
+        if (cuotas === 1 && conoceTarjeta === null) {
+          setError('Indique si conoce la tarjeta del cliente.'); return
+        }
+        if (cuotas === 1 && conoceTarjeta === false) {
+          const tasa = parseFloat(tasaManual)
+          if (!tasa || tasa <= 0) { setError('Ingrese la tasa a aplicar.'); return }
+          const base = calcularCargo(m, tasa)
+          tarjetaResult = { ...base, cuotas: 1, valorPorCuota: null }
+          esManual = true
+        } else {
+          const cell = cuotas === 1 ? config.oneCuota[banco][cardType] : config.tasa0[banco][cuotas]
+          const base = calcularCargo(m, cell.rate)
+          tarjetaResult = { ...base, cuotas, valorPorCuota: isTasa0 ? base.totalACobrar / cuotas : null }
+        }
       }
       if (isPuntos) {
         puntosResult = calcularCargo(mP, config.puntos[banco].rate)
       }
-      setResultado({ tarjetaResult, puntosResult })
+      setResultado({ tarjetaResult, puntosResult, esManual })
 
     } else {
       if (!cardBanco) { setError('Seleccione el banco emisor de la tarjeta.'); return }
@@ -188,6 +213,7 @@ export default function App() {
 
   const comparativoPOS = (() => {
     if (mode !== 'pos' || !resultado?.tarjetaResult || isTasa0) return []
+    if (resultado?.esManual) return []
     if (usaComparativoPropia) return getComparativoPropiaVsOtro(banco, propiaRed, mVal, config)
     return getComparativoTarjeta(cuotas, cardType, mVal, config)
   })()
@@ -220,7 +246,15 @@ export default function App() {
     return <AdminPanel config={config} onSave={handleAdminSave} onBack={() => setPage('main')} />
   }
 
-  const canCalcular = mode === 'pos' ? (!!banco && !!plan) : (!!cardBanco && !!plan)
+  const canCalcular = (() => {
+    if (mode === 'tarjeta') return !!cardBanco && !!plan
+    if (!banco || !plan) return false
+    if (plan === '1') {
+      if (conoceTarjeta === null) return false
+      if (conoceTarjeta === false) return !!tasaManual && parseFloat(tasaManual) > 0
+    }
+    return true
+  })()
 
   return (
     <div className="min-vh-100 bg-light">
@@ -283,23 +317,85 @@ export default function App() {
                   </div>
 
                   {plan === '1' && (<>
-                    <div className="mb-3">
-                      <label className="form-label fw-medium">Tipo de Tarjeta</label>
-                      <select className="form-select" value={cardType} onChange={e => { setCardType(e.target.value); setResultado(null) }}>
-                        {availableCardTypes.map(ct => <option key={ct.id} value={ct.id}>{ct.label}</option>)}
-                      </select>
-                      {banco && <div className="form-text">Tasa: <strong>{fmtPct(config.oneCuota[banco]?.[cardType]?.rate ?? 0)}</strong> + IVA</div>}
-                    </div>
-
-                    {isPropia && (
+                    {/* ¿Conoces la tarjeta? — pregunta inicial */}
+                    {conoceTarjeta === null && (
                       <div className="mb-3">
-                        <label className="form-label fw-medium">Red de TC Propia</label>
+                        <label className="form-label fw-medium">¿Conoces la tarjeta del cliente?</label>
                         <div className="btn-group w-100" role="group">
-                          <button type="button" className={`btn ${propiaRed === 'VISA' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => { setPropiaRed('VISA'); setResultado(null) }}>Visa</button>
-                          <button type="button" className={`btn ${propiaRed === 'MC'   ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => { setPropiaRed('MC');   setResultado(null) }}>Mastercard</button>
+                          <button type="button" className="btn btn-outline-success"
+                            onClick={() => { setConoceTarjeta(true); setResultado(null) }}>
+                            <i className="bi bi-check-circle me-1"></i>Sí, la conozco
+                          </button>
+                          <button type="button" className="btn btn-outline-secondary"
+                            onClick={() => { setConoceTarjeta(false); setResultado(null) }}>
+                            <i className="bi bi-question-circle me-1"></i>No sé cuál es
+                          </button>
                         </div>
                       </div>
                     )}
+
+                    {/* Sí — selector de tipo de tarjeta */}
+                    {conoceTarjeta === true && (<>
+                      <div className="mb-3">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                          <label className="form-label fw-medium mb-0">Tipo de Tarjeta</label>
+                          <button type="button" className="btn btn-link btn-sm p-0 text-muted"
+                            style={{ fontSize: '0.8rem' }}
+                            onClick={() => { setConoceTarjeta(null); setResultado(null) }}>
+                            Cambiar
+                          </button>
+                        </div>
+                        <select className="form-select" value={cardType} onChange={e => { setCardType(e.target.value); setResultado(null) }}>
+                          {availableCardTypes.map(ct => <option key={ct.id} value={ct.id}>{ct.label}</option>)}
+                        </select>
+                        {banco && <div className="form-text">Tasa: <strong>{fmtPct(config.oneCuota[banco]?.[cardType]?.rate ?? 0)}</strong> + IVA</div>}
+                      </div>
+                      {isPropia && (
+                        <div className="mb-3">
+                          <label className="form-label fw-medium">Red de TC Propia</label>
+                          <div className="btn-group w-100" role="group">
+                            <button type="button" className={`btn ${propiaRed === 'VISA' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => { setPropiaRed('VISA'); setResultado(null) }}>Visa</button>
+                            <button type="button" className={`btn ${propiaRed === 'MC'   ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => { setPropiaRed('MC');   setResultado(null) }}>Mastercard</button>
+                          </div>
+                        </div>
+                      )}
+                    </>)}
+
+                    {/* No — tasa manual con sugerencia de tasa máxima */}
+                    {conoceTarjeta === false && (() => {
+                      const maxRate = getMaxOneCuotaRate(banco, config)
+                      return (
+                        <div className="mb-3">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <label className="form-label fw-medium mb-0">Tasa a aplicar</label>
+                            <button type="button" className="btn btn-link btn-sm p-0 text-muted"
+                              style={{ fontSize: '0.8rem' }}
+                              onClick={() => { setConoceTarjeta(null); setTasaManual(''); setResultado(null) }}>
+                              Cambiar
+                            </button>
+                          </div>
+                          {maxRate && (
+                            <div className="alert alert-warning py-2 mb-2 d-flex align-items-center justify-content-between">
+                              <span className="small">
+                                <i className="bi bi-lightbulb me-1"></i>
+                                Tasa máxima: <strong>{CT_LABELS[maxRate.ct]}</strong> — <strong>{fmtPct(maxRate.rate)}</strong>
+                              </span>
+                              <button type="button" className="btn btn-sm btn-outline-dark ms-2"
+                                onClick={() => { setTasaManual(String(maxRate.rate)); setResultado(null) }}>
+                                Usar
+                              </button>
+                            </div>
+                          )}
+                          <div className="input-group">
+                            <input type="number" className="form-control" placeholder="Ej. 3.00"
+                              min="0" step="0.01" value={tasaManual}
+                              onChange={e => { setTasaManual(e.target.value); setResultado(null) }} />
+                            <span className="input-group-text">%</span>
+                          </div>
+                          <div className="form-text">+ IVA ({(IVA * 100).toFixed(0)}%) sobre el cargo</div>
+                        </div>
+                      )
+                    })()}
                   </>)}
 
                   {showTarjeta && (
