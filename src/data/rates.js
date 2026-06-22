@@ -5,6 +5,7 @@ export const BANCOS = [
   'BAC',
   'CUSCATLAN',
   'NICO VISA',
+  'WOMPI',
 ]
 
 export const CARD_TYPES = [
@@ -26,6 +27,7 @@ export const oneCuotaRates = {
   'BAC':        { VISA: 2.20,  MC: 2.20,  PROPIA: 2.20 },
   'CUSCATLAN':  { VISA: 2.15,  MC: 2.15,  PROPIA: 2.00 },
   'NICO VISA':  { VISA: 1.50,  MC: 3.55,  PROPIA: 0.00 },
+  'WOMPI':      { VISA: 0.00,  MC: 0.00,  PROPIA: 0.00 },
 }
 
 // Tasas Tasa 0 (por banco y número de cuotas)
@@ -37,6 +39,7 @@ export const tasa0Rates = {
   'BAC':        { 2: 0.00, 3: 5.00, 6: 7.00,  9: 8.00,  12: 9.00,  18: 0.00,  24: 0.00,  36: 0.00 },
   'CUSCATLAN':  { 2: 0.00, 3: 2.00, 6: 2.25,  9: 2.60,  12: 3.25,  18: 0.00,  24: 3.50,  36: 0.00 },
   'NICO VISA':  { 2: 0.00, 3: 0.00, 6: 0.00,  9: 0.00,  12: 0.00,  18: 0.00,  24: 0.00,  36: 0.00 },
+  'WOMPI':      { 2: 0.00, 3: 0.00, 6: 0.00,  9: 0.00,  12: 0.00,  18: 0.00,  24: 0.00,  36: 0.00 },
 }
 
 // Tasas Pago con Puntos (por banco)
@@ -48,6 +51,7 @@ export const pagoPuntosRates = {
   'BAC':        0.00,
   'CUSCATLAN':  1.00,
   'NICO VISA':  0.00,
+  'WOMPI':      0.00,
 }
 
 export function getAvailableCuotas(banco) {

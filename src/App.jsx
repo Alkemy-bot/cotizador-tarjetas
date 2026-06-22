@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BANCOS, CARD_TYPES, IVA, CUOTAS_TASA0, calcularCargo } from './data/rates'
-import { loadConfig, saveConfig } from './data/adminConfig'
+import { loadConfig, saveConfig, withMissingBancos } from './data/adminConfig'
 import AdminPanel from './components/AdminPanel'
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
@@ -94,7 +94,8 @@ export default function App() {
         if (!res.ok) return
         const data = await res.json()
         if (!data) return
-        setConfig(prev => JSON.stringify(prev) !== JSON.stringify(data) ? data : prev)
+        const merged = withMissingBancos(data)
+        setConfig(prev => JSON.stringify(prev) !== JSON.stringify(merged) ? merged : prev)
       } catch {}
     }, 15000)
     return () => clearInterval(interval)

@@ -8,6 +8,21 @@ export default function AdminPanel({ config, onSave, onBack }) {
   const [codeError, setCodeError] = useState(false)
   const [activeTab, setActiveTab] = useState('oneCuota')
   const [draft,     setDraft]     = useState(() => JSON.parse(JSON.stringify(config)))
+  const [saveError, setSaveError] = useState('')
+  const [saving,    setSaving]    = useState(false)
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onSave(draft)
+      onBack()
+    } catch {
+      setSaveError('No se pudieron guardar los cambios. Intente nuevamente.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   function handleLogin(e) {
     e.preventDefault()
@@ -127,14 +142,20 @@ export default function AdminPanel({ config, onSave, onBack }) {
               {activeTab === 'puntos'   && <PuntosTab   draft={draft} set={setPuntos}   />}
             </div>
 
+            {saveError && (
+              <div className="alert alert-danger m-3 mb-0 py-2">
+                <i className="bi bi-exclamation-triangle me-2"></i>{saveError}
+              </div>
+            )}
+
             <div className="card-footer d-flex gap-2 justify-content-between align-items-center">
               <button className="btn btn-outline-danger btn-sm" onClick={resetDefault}>
                 <i className="bi bi-arrow-counterclockwise me-1"></i>Restaurar defaults
               </button>
               <div className="d-flex gap-2">
                 <button className="btn btn-secondary btn-sm" onClick={onBack}>Cancelar</button>
-                <button className="btn btn-success btn-sm fw-semibold" onClick={() => { onSave(draft); onBack() }}>
-                  <i className="bi bi-floppy me-1"></i>Guardar cambios
+                <button className="btn btn-success btn-sm fw-semibold" onClick={handleSave} disabled={saving}>
+                  <i className="bi bi-floppy me-1"></i>{saving ? 'Guardando...' : 'Guardar cambios'}
                 </button>
               </div>
             </div>
